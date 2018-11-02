@@ -1,0 +1,6 @@
+# Ignore snap local install
+*_snap.so
+*snap.py*
+# Ignore the readings dir which contains research
+# papers and other relevant readings for the project
+readings/*
