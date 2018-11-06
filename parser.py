@@ -1,3 +1,9 @@
+'''
+Parser for citation network data. 
+Dataset is available at https://aminer.org/citation, Citation network V1.
+'''
+
+
 import networkx as nx
 
 
