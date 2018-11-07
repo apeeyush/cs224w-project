@@ -16,8 +16,8 @@ knownInvalidAuthorNames.add(" VI")
 knownInvalidAuthorNames.add(" Jr.")
 knownInvalidAuthorNames.add("Staff")
 
-pTest = 0.05 # [0, 0.01] falls into test set
-pVal = 0.1 # (0.01, 0.02] falls into validation set
+pTest = 0.05 # [0, 0.05] falls into test set
+pVal = 0.1 # (0.05, 0.1] falls into validation set
 enableAttributes = True
 
 # Flags to control whether output graph G includes following types of edges
