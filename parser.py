@@ -25,8 +25,8 @@ def appendNode(G, node):
   Add node to G if it's not already there
   Optionally adding 'val' and 'test' attributes to node with set probability.
   '''
-  if not G.has_node(currentPaperId):
-    G.add_node(currentPaperId)
+  if not G.has_node(node):
+    G.add_node(node)
 
 
 def loadGraph(fileName):
