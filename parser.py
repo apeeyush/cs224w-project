@@ -4,6 +4,8 @@ Dataset is available at https://aminer.org/citation, Citation network V1.
 '''
 import networkx as nx
 import random
+import json
+from networkx.readwrite import json_graph
 
 random.seed(0)
 
@@ -36,13 +38,13 @@ def appendNode(G, node):
     if enableAttributes:
       r = random.uniform(0, 1)
       if r <= pTest:
-        G.add_node(node, test=True)
+        G.add_node(node, test=True, val=False)
         return
       elif r <= pVal:
-        G.add_node(node, val=True)
+        G.add_node(node, test=False, val=True)
         return
-    G.add_node(node)
-      
+    G.add_node(node, test=False, val=False)
+
 
 def appendEdge(G, node1, node2, label):
   shouldIngest = ingestionFlags.get(label, False)
@@ -130,15 +132,40 @@ def printNodeStat(G):
   numTest = 0
   numTrain = 0
   for node in G.__iter__():
-    if "val" in G.nodes[node]:
+    if "val" in G.node[node] and G.node[node]["val"]:
       numVal += 1
-    elif "test" in G.nodes[node]:
+    elif "test" in G.node[node] and G.node[node]["test"]:
       numTest += 1
     else:
       numTrain += 1
   print("Number of nodes labeled as val, test, train are %d, %d, %d"
     % (numVal, numTest, numTrain))
 
+def dumpAsJson(G, path_prefix):
+  """Dumps the graph data as json.
+
+  The format dumped is parsable by GraphSAGE util method.
+  """
+  data = json_graph.node_link_data(G)
+  with open("{}-G.json".format(path_prefix), "w") as f:
+    json.dump(data, f)
+  with open("acm-id_map.json", "w") as f:
+    node_name_id_map = {}
+    idx = 0
+    for node_id in sorted(G.nodes()):
+      node_name_id_map[str(node_id)] = idx
+      idx += 1
+    json.dump(node_name_id_map, f)
+  with open("acm-class_map.json", "w") as f:
+    node_name_class_map = {}
+    for node_id in sorted(G.nodes()):
+      # Load dummy class data
+      node_name_class_map[str(node_id)] = [1]
+    json.dump(node_name_class_map, f)
+  with open("acm-walks.txt", "w") as f:
+    f.write("0\t1")  # Write dummy data
+
 
 G = loadGraph("outputacm.txt")
 printNodeStat(G)
+dumpAsJson(G, "acm")
