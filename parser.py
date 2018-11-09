@@ -4,8 +4,17 @@ Dataset is available at https://aminer.org/citation, Citation network V1.
 '''
 import networkx as nx
 import random
-import json
-from networkx.readwrite import json_graph
+
+'''
+Usage:
+
+ingestionFlags = {
+  "reference": True,
+  "coauthor": True,
+  "publication": True
+}
+G = parser.loadGraph("outputacm.txt", ingestionFlags)
+'''
 
 random.seed(0)
 
@@ -18,41 +27,53 @@ knownInvalidAuthorNames.add(" VI")
 knownInvalidAuthorNames.add(" Jr.")
 knownInvalidAuthorNames.add("Staff")
 
-pTest = 0.05 # [0, 0.05] falls into test set
-pVal = 0.1 # (0.05, 0.1] falls into validation set
+pTest = 0.05 # [0, 0.01] falls into test set
+pVal = 0.1 # (0.01, 0.02] falls into validation set
 enableAttributes = True
 
-# Flags to control whether output graph G includes following types of edges
-ingestionFlags = {
-  "reference": True,
-  "coauthor": True,
-  "publication": True
-}
+# Only ingest x% of nodes
+samplingRate = 100
 
-def appendNode(G, node):
+paperId2NodeId = dict()
+currentNodeId = 0
+
+def appendNode(G, paperId):
   '''
   Add node to G if it's not already there
   Optionally adding 'val' and 'test' attributes to node with set probability.
   '''
-  if not G.has_node(node):
+  global currentNodeId
+  if paperId in paperId2NodeId:
+    nodeId = paperId2NodeId[paperId]
+  else:
+    nodeId = currentNodeId
+    paperId2NodeId[paperId] = nodeId
+    currentNodeId += 1
+  if not G.has_node(nodeId):
     if enableAttributes:
       r = random.uniform(0, 1)
       if r <= pTest:
-        G.add_node(node, test=True, val=False)
+        G.add_node(nodeId, test=True)
         return
       elif r <= pVal:
-        G.add_node(node, test=False, val=True)
+        G.add_node(nodeId, val=True)
         return
-    G.add_node(node, test=False, val=False)
+    G.add_node(nodeId)
+      
 
-
-def appendEdge(G, node1, node2, label):
+def appendEdge(G, paper1, paper2, label, ingestionFlags):
   shouldIngest = ingestionFlags.get(label, False)
   if shouldIngest:
+    node1 = paperId2NodeId[paper1]
+    node2 = paperId2NodeId[paper2]
     G.add_edge(node1, node2, type=label)
 
 
-def loadGraph(fileName):
+def shouldSample(paperId):
+  return paperId % 100 > samplingRate
+
+
+def loadGraph(fileName, ingestionFlags):
   G = nx.MultiGraph()
   authorMap = dict() # key: author, value: list of paperId
   publicationMap = dict() # key: publication+year, value: list of paperId
@@ -82,14 +103,14 @@ def loadGraph(fileName):
       elif prefix == "#%":
         references.append(int(line[2:]))
       elif prefix == "\n":
-        if len(references) < 1 or currentPaperId in blacklist:
+        if len(references) < 1 or shouldSample(currentPaperId):
           blacklist.add(currentPaperId)
-        else:
+        elif currentPaperId not in blacklist:
           appendNode(G, currentPaperId)
           for reference in references:
             if reference not in blacklist:
               appendNode(G, reference)
-              appendEdge(G, currentPaperId, reference, "reference")
+              appendEdge(G, currentPaperId, reference, "reference", ingestionFlags)
           if len(authorsRaw) >= 1:
             authors = authorsRaw.split(',')
             for author in authors:
@@ -102,16 +123,16 @@ def loadGraph(fileName):
         references = []
   print "After adding reference edges:"
   printGraphStat(G)
-  annotateGraphWithEdges(G, authorMap, "coauthor")
+  annotateGraphWithEdges(G, authorMap, "coauthor", ingestionFlags)
   print "After adding coauthor edges:"
   printGraphStat(G)
-  annotateGraphWithEdges(G, publicationMap, 'publication')
+  annotateGraphWithEdges(G, publicationMap, 'publication', ingestionFlags)
   print "After adding publication edges:"
   printGraphStat(G)
   return G
 
 
-def annotateGraphWithEdges(G, map, t):
+def annotateGraphWithEdges(G, map, t, ingestionFlags):
   '''
   map: a dictionary of <key, list[paperId]>
   For each key in the map, add pair-wise edge to every node denoted by value 
@@ -120,7 +141,7 @@ def annotateGraphWithEdges(G, map, t):
     papers = map[k]
     for index1 in xrange(len(papers)):
       for index2 in xrange(index1+1, len(papers)):
-        appendEdge(G, papers[index1], papers[index2], t)
+        appendEdge(G, papers[index1], papers[index2], t, ingestionFlags)
 
 
 def printGraphStat(G):
@@ -132,14 +153,15 @@ def printNodeStat(G):
   numTest = 0
   numTrain = 0
   for node in G.__iter__():
-    if "val" in G.node[node] and G.node[node]["val"]:
+    if "val" in G.nodes[node]:
       numVal += 1
-    elif "test" in G.node[node] and G.node[node]["test"]:
+    elif "test" in G.nodes[node]:
       numTest += 1
     else:
       numTrain += 1
   print("Number of nodes labeled as val, test, train are %d, %d, %d"
     % (numVal, numTest, numTrain))
+
 
 def dumpAsJson(G, path_prefix):
   """Dumps the graph data as json.
@@ -165,7 +187,12 @@ def dumpAsJson(G, path_prefix):
   with open("acm-walks.txt", "w") as f:
     f.write("0\t1")  # Write dummy data
 
+ingestionFlags = {
+  "reference": True,
+  "coauthor": True,
+  "publication": True
+}
 
-G = loadGraph("outputacm.txt")
+G = loadGraph("outputacm.txt", ingestionFlags)
 printNodeStat(G)
 dumpAsJson(G, "acm")
