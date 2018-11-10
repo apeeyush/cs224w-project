@@ -4,6 +4,8 @@ Dataset is available at https://aminer.org/citation, Citation network V1.
 '''
 import networkx as nx
 import random
+import json
+from networkx.readwrite import json_graph
 
 '''
 Usage:
@@ -53,12 +55,12 @@ def appendNode(G, paperId):
     if enableAttributes:
       r = random.uniform(0, 1)
       if r <= pTest:
-        G.add_node(nodeId, test=True)
+        G.add_node(node, test=True, val=False)
         return
       elif r <= pVal:
-        G.add_node(nodeId, val=True)
+        G.add_node(node, test=False, val=True)
         return
-    G.add_node(nodeId)
+    G.add_node(node, test=False, val=False)
       
 
 def appendEdge(G, paper1, paper2, label, ingestionFlags):
@@ -153,9 +155,9 @@ def printNodeStat(G):
   numTest = 0
   numTrain = 0
   for node in G.__iter__():
-    if "val" in G.nodes[node]:
+    if "val" in G.node[node] and G.node[node]["val"]:
       numVal += 1
-    elif "test" in G.nodes[node]:
+    elif "test" in G.node[node] and G.node[node]["test"]:
       numTest += 1
     else:
       numTrain += 1
