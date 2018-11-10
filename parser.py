@@ -55,12 +55,12 @@ def appendNode(G, paperId):
     if enableAttributes:
       r = random.uniform(0, 1)
       if r <= pTest:
-        G.add_node(node, test=True, val=False)
+        G.add_node(nodeId, test=True, val=False)
         return
       elif r <= pVal:
-        G.add_node(node, test=False, val=True)
+        G.add_node(nodeId, test=False, val=True)
         return
-    G.add_node(node, test=False, val=False)
+    G.add_node(nodeId, test=False, val=False)
       
 
 def appendEdge(G, paper1, paper2, label, ingestionFlags):
