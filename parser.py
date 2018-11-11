@@ -191,8 +191,8 @@ def dumpAsJson(G, path_prefix):
 
 ingestionFlags = {
   "reference": True,
-  "coauthor": True,
-  "publication": True
+  "coauthor": False,
+  "publication": False
 }
 
 G = loadGraph("outputacm.txt", ingestionFlags)
