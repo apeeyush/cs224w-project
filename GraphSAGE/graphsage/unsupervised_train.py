@@ -31,7 +31,7 @@ flags.DEFINE_string("model_size", "small", "Can be big or small; model specific 
 flags.DEFINE_string('train_prefix', '', 'name of the object file that stores the training data. must be specified.')
 
 # left to default values in main experiments 
-flags.DEFINE_integer('epochs', 100, 'number of epochs to train.')
+flags.DEFINE_integer('epochs', 10, 'number of epochs to train.')
 flags.DEFINE_float('dropout', 0.0, 'dropout rate (1 - keep probability).')
 flags.DEFINE_float('weight_decay', 0.0, 'weight for l2 loss on embedding matrix.')
 flags.DEFINE_integer('max_degree', 100, 'maximum node degree.')
@@ -48,7 +48,7 @@ flags.DEFINE_integer('identity_dim', 0, 'Set to positive value to use identity e
 #logging, saving, validation settings etc.
 flags.DEFINE_boolean('save_embeddings', True, 'whether to save embeddings for all nodes after training')
 flags.DEFINE_string('base_log_dir', '.', 'base directory for logging and saving embeddings')
-flags.DEFINE_integer('validate_iter', 5000, "how often to run a validation minibatch.")
+flags.DEFINE_integer('validate_iter', 1000, "how often to run a validation minibatch.")
 flags.DEFINE_integer('validate_batch_size', 256, "how many nodes per validation sample.")
 flags.DEFINE_integer('gpu', 1, "which gpu to use.")
 flags.DEFINE_integer('print_every', 50, "How often to print training info.")
