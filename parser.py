@@ -1,15 +1,8 @@
-'''
-Parser for citation network data. 
+'''Parser for citation network data. 
+
 Dataset is available at https://aminer.org/citation, Citation network V1.
-'''
-import networkx as nx
-import random
-import json
-from networkx.readwrite import json_graph
 
-'''
 Usage:
-
 ingestionFlags = {
   "reference": True,
   "coauthor": True,
@@ -17,6 +10,13 @@ ingestionFlags = {
 }
 G = parser.loadGraph("outputacm.txt", ingestionFlags)
 '''
+
+import networkx as nx
+import numpy as np
+import random
+import json
+from collections import defaultdict
+from networkx.readwrite import json_graph
 
 random.seed(0)
 
@@ -29,8 +29,8 @@ knownInvalidAuthorNames.add(" VI")
 knownInvalidAuthorNames.add(" Jr.")
 knownInvalidAuthorNames.add("Staff")
 
-pTest = 0.05 # [0, 0.01] falls into test set
-pVal = 0.1 # (0.01, 0.02] falls into validation set
+pTest = 0.1  # [0, 0.1] falls into test set
+pVal = 0.2  # (0.1, 0.2] falls into validation set
 enableAttributes = True
 
 # Only ingest x% of nodes
@@ -77,14 +77,16 @@ def shouldSample(paperId):
 
 def loadGraph(fileName, ingestionFlags):
   G = nx.MultiGraph()
-  authorMap = dict() # key: author, value: list of paperId
-  publicationMap = dict() # key: publication+year, value: list of paperId
+  authorMap = dict()  # key: author, value: list of paperId
+  publicationMap = dict()  # key: publication+year, value: list of paperId
+  paperFeaturesMap = dict()  # key: research paper, value: (year, title, abstract)
   blacklist = set()
   # In each iteration we keep the following information until we see the new line
   # authors: list of authors
   # references: list of references
   # currentPaperId
   # currentPaperTitle
+  # currentPaperAbstract
   # publicationYear
   # publicationVenue
   references = []
@@ -94,6 +96,8 @@ def loadGraph(fileName, ingestionFlags):
       prefix = line[:2]
       if prefix == "#*":
         currentPaperTitle = line[2:].strip()
+      elif prefix == "#!":
+        currentPaperAbstract = line[2:].strip()
       elif prefix == "#@":
         authorsRaw = line[2:].strip()
       elif prefix == "#t":
@@ -109,6 +113,7 @@ def loadGraph(fileName, ingestionFlags):
           blacklist.add(currentPaperId)
         elif currentPaperId not in blacklist:
           appendNode(G, currentPaperId)
+          paperFeaturesMap[currentPaperId] = (int(publicationYear), currentPaperTitle, currentPaperAbstract)
           for reference in references:
             if reference not in blacklist:
               appendNode(G, reference)
@@ -121,8 +126,10 @@ def loadGraph(fileName, ingestionFlags):
           hashKey = publicationVenue + publicationYear
           publicationMap.setdefault(hashKey,[]).append(currentPaperId)
 
-        currentPaperTitle, authorsRaw, publicationYear, publicationVenue, currentPaperId = "", "", "", "", ""
+        (currentPaperTitle, currentPaperAbstract, authorsRaw, publicationYear, publicationVenue,
+         currentPaperId) = ("", "", "", "", "", "")
         references = []
+  addNodeFeatures(G, paperFeaturesMap)
   print "After adding reference edges:"
   printGraphStat(G)
   annotateGraphWithEdges(G, authorMap, "coauthor", ingestionFlags)
@@ -146,6 +153,19 @@ def annotateGraphWithEdges(G, map, t, ingestionFlags):
         appendEdge(G, papers[index1], papers[index2], t, ingestionFlags)
 
 
+def addNodeFeatures(G, nodeFeaturesMap):
+  nodeFeatureAttr = defaultdict(list)
+  maxPublicationYear = max(v[0] for v in nodeFeaturesMap.values())
+  minPublicationYear = min(v[0] for v in nodeFeaturesMap.values())
+  for paperId, features in nodeFeaturesMap.items():
+    if paperId in paperId2NodeId:
+      nodeId = paperId2NodeId[paperId]
+      normalizedPublicationYear = (features[0] - minPublicationYear) * 1.0 / maxPublicationYear
+      nodeFeatureAttr[nodeId].append(normalizedPublicationYear)
+      # TODO: Add title and abstract related features
+  nx.set_node_attributes(G, "feature", nodeFeatureAttr)
+
+
 def printGraphStat(G):
   print G.number_of_nodes(), G.number_of_edges()
 
@@ -165,7 +185,7 @@ def printNodeStat(G):
     % (numVal, numTest, numTrain))
 
 
-def dumpAsJson(G, path_prefix):
+def dumpAsJson(G, path_prefix, dumpFeatures):
   """Dumps the graph data as json.
 
   The format dumped is parsable by GraphSAGE util method.
@@ -173,20 +193,32 @@ def dumpAsJson(G, path_prefix):
   data = json_graph.node_link_data(G)
   with open("{}-G.json".format(path_prefix), "w") as f:
     json.dump(data, f)
-  with open("acm-id_map.json", "w") as f:
+  with open("{}-id_map.json".format(path_prefix), "w") as f:
     node_name_id_map = {}
     idx = 0
     for node_id in sorted(G.nodes()):
       node_name_id_map[str(node_id)] = idx
       idx += 1
     json.dump(node_name_id_map, f)
-  with open("acm-class_map.json", "w") as f:
+  with open("{}-feats.npy".format(path_prefix), "w") as f:
+    features = []
+    numNodesWithoutFeatures = 0
+    for node_id in sorted(G.nodes()):
+      if "feature" in G.node[node_id]:
+        features.append(G.node[node_id]["feature"])
+      else:
+        features.append([0])
+        numNodesWithoutFeatures += 1
+    print("Number of nodes without features: {}".format(numNodesWithoutFeatures))
+    if dumpFeatures:
+      np.save(f, features)
+  with open("{}-class_map.json".format(path_prefix), "w") as f:
     node_name_class_map = {}
     for node_id in sorted(G.nodes()):
       # Load dummy class data
       node_name_class_map[str(node_id)] = [1]
     json.dump(node_name_class_map, f)
-  with open("acm-walks.txt", "w") as f:
+  with open("{}-walks.txt".format(path_prefix), "w") as f:
     f.write("0\t1")  # Write dummy data
 
 ingestionFlags = {
@@ -197,4 +229,4 @@ ingestionFlags = {
 
 G = loadGraph("outputacm.txt", ingestionFlags)
 printNodeStat(G)
-dumpAsJson(G, "acm")
+dumpAsJson(G, "acm", True)
