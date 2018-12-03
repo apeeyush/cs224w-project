@@ -20,4 +20,7 @@ Git repository for CS224W project.
     # Run GraphSAGE unsupervised
     cd GraphSAGE
     bash example_unsupervised.sh
+    # Run evaluation script
+    cd ..
+    python eval.py
 
