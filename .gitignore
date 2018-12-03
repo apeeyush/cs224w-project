@@ -4,3 +4,4 @@
 # Ignore the readings dir which contains research
 # papers and other relevant readings for the project
 readings/*
+outputacm.txt

@@ -17,6 +17,7 @@ import random
 import json
 from collections import defaultdict
 from networkx.readwrite import json_graph
+import pickle
 
 random.seed(0)
 
@@ -30,7 +31,7 @@ knownInvalidAuthorNames.add(" Jr.")
 knownInvalidAuthorNames.add("Staff")
 
 pTest = 0.1  # [0, 0.1] falls into test set
-pVal = 0.2  # (0.1, 0.2] falls into validation set
+pVal = 0  # no validation node set
 enableAttributes = True
 
 # Only ingest x% of nodes
@@ -38,6 +39,9 @@ samplingRate = 100
 
 paperId2NodeId = dict()
 currentNodeId = 0
+
+pEdgeVal = 0.01 # 1% of edges are hidden from generated graph as validation edges
+validationEdges = set()
 
 def appendNode(G, paperId):
   '''
@@ -64,11 +68,16 @@ def appendNode(G, paperId):
       
 
 def appendEdge(G, paper1, paper2, label, ingestionFlags):
+  global validationEdges
   shouldIngest = ingestionFlags.get(label, False)
   if shouldIngest:
-    node1 = paperId2NodeId[paper1]
-    node2 = paperId2NodeId[paper2]
-    G.add_edge(node1, node2, type=label)
+    r = random.uniform(0, 1)
+    if r <= pEdgeVal:
+      validationEdges.add((paper1, paper2))
+    else:
+      node1 = paperId2NodeId[paper1]
+      node2 = paperId2NodeId[paper2]
+      G.add_edge(node1, node2, type=label)
 
 
 def shouldSample(paperId):
@@ -129,7 +138,6 @@ def loadGraph(fileName, ingestionFlags):
         (currentPaperTitle, currentPaperAbstract, authorsRaw, publicationYear, publicationVenue,
          currentPaperId) = ("", "", "", "", "", "")
         references = []
-  addNodeFeatures(G, paperFeaturesMap)
   print "After adding reference edges:"
   printGraphStat(G)
   annotateGraphWithEdges(G, authorMap, "coauthor", ingestionFlags)
@@ -151,19 +159,6 @@ def annotateGraphWithEdges(G, map, t, ingestionFlags):
     for index1 in xrange(len(papers)):
       for index2 in xrange(index1+1, len(papers)):
         appendEdge(G, papers[index1], papers[index2], t, ingestionFlags)
-
-
-def addNodeFeatures(G, nodeFeaturesMap):
-  nodeFeatureAttr = defaultdict(list)
-  maxPublicationYear = max(v[0] for v in nodeFeaturesMap.values())
-  minPublicationYear = min(v[0] for v in nodeFeaturesMap.values())
-  for paperId, features in nodeFeaturesMap.items():
-    if paperId in paperId2NodeId:
-      nodeId = paperId2NodeId[paperId]
-      normalizedPublicationYear = (features[0] - minPublicationYear) * 1.0 / maxPublicationYear
-      nodeFeatureAttr[nodeId].append(normalizedPublicationYear)
-      # TODO: Add title and abstract related features
-  nx.set_node_attributes(G, "feature", nodeFeatureAttr)
 
 
 def printGraphStat(G):
@@ -221,6 +216,21 @@ def dumpAsJson(G, path_prefix, dumpFeatures):
   with open("{}-walks.txt".format(path_prefix), "w") as f:
     f.write("0\t1")  # Write dummy data
 
+
+def selectValidationNonEdges(G):
+  validationNonEdges = set()
+  n = G.number_of_nodes()
+  size = 0
+  target = len(validationEdges)
+  while size < target:
+    randomPaper1 = random.randint(0, n)
+    randomPaper2 = random.randint(0, n)
+    if not G.has_edge(randomPaper1, randomPaper2):
+      validationNonEdges.add((randomPaper1, randomPaper2))
+      size += 1
+  return validationNonEdges
+
+
 ingestionFlags = {
   "reference": True,
   "coauthor": False,
@@ -228,5 +238,14 @@ ingestionFlags = {
 }
 
 G = loadGraph("outputacm.txt", ingestionFlags)
+validationNonEdges = selectValidationNonEdges(G)
+
+with open('validation_edges', 'wb') as file:
+  pickle.dump(validationEdges, file)
+with open('validation_nonedges', 'wb') as file:
+  pickle.dump(validationNonEdges, file)
+with open('graph_stat', 'wb') as file:
+  pickle.dump((G.number_of_nodes(), G.number_of_edges()), file)
+
 printNodeStat(G)
 dumpAsJson(G, "acm", True)
