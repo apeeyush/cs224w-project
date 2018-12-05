@@ -76,6 +76,7 @@ def appendEdge(G, paper1, paper2, label, ingestionFlags):
     node2 = paperId2NodeId[paper2]
     if r <= pEdgeVal:
       validationEdges.add((node1, node2))
+      G.add_edge(node1, node2, type=label)
     else:
       G.add_edge(node1, node2, type=label)
 

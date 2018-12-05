@@ -1,6 +1,7 @@
 import pickle
 import numpy as np
 import random
+from scipy.spatial import distance
 
 random.seed(0)
 data_dir = "GraphSAGE/unsup-../graphsage_mean_small_0.000010"
@@ -36,7 +37,7 @@ def predictEdgeBasedOnEmbedding(node1, node2):
   '''
   embedding1 = getNodeEmbedding(node1)
   embedding2 = getNodeEmbedding(node2)
-  return np.linalg.norm(embedding1 - embedding2, 2)
+  return distance.cosine(embedding1, embedding2)
 
 
 def coinToss(r):
@@ -44,28 +45,18 @@ def coinToss(r):
   return toss < r
 
 
-def evaluateAUC():
+def evaluate():
   validationEdges, validationNonEdges = loadValidationEdges()
   numNode, numEdge = loadGraphStat()
   edgeDensity = numEdge / (numNode * (numNode-1) / 2.0)
   edgeWin, nonEdgeWin = 0,0
   for edge, nonEdge in zip(validationEdges, validationNonEdges):
-    edgeDistance = predictEdgeBasedOnEmbedding(edge[0], edge[1])
-    nonEdgeDistance = predictEdgeBasedOnEmbedding(nonEdge[0], nonEdge[1])
-    if edgeDistance < nonEdgeDistance:
+    edgeSim = predictEdgeBasedOnEmbedding(edge[0], edge[1])
+    nonEdgeSim = predictEdgeBasedOnEmbedding(nonEdge[0], nonEdge[1])
+    if edgeSim > nonEdgeSim:
       edgeWin += 1
     else:
       nonEdgeWin += 1
-  print("Edge density of the graph is %f" % (edgeDensity))
-  print("There are a total of %d validation edges and %d validation non-edges" % (len(validationEdges), len(validationNonEdges)))
-  print("Number of times a random validation edge is more similar: %d" % (edgeWin))
-  print("Number of times a random validation non-edge is more similar: %d" % (nonEdgeWin))
-
-
-def evaluate():
-  validationEdges, validationNonEdges = loadValidationEdges()
-  numNode, numEdge = loadGraphStat()
-  edgeDensity = numEdge / (numNode * (numNode-1) / 2.0)
   edgeProbEmbed, nonEdgeProbEmbed = 0,0
   for edge in validationEdges:
     edgeProbEmbed += predictEdgeBasedOnEmbedding(edge[0], edge[1])
@@ -75,8 +66,10 @@ def evaluate():
   nonEdgeProbEmbed /= len(validationNonEdges)
   print("Edge density of the graph is %f" % (edgeDensity))
   print("There are a total of %d validation edges and %d validation non-edges" % (len(validationEdges), len(validationNonEdges)))
-  print("Among all validation edges, average l2 distance of a predicted link is %f" % (edgeProbEmbed))
-  print("Among all validation non-edges, average l2 distance of a predicted link is %f" % (nonEdgeProbEmbed))
+  print("Number of times a random validation edge is more similar: %d" % (edgeWin))
+  print("Number of times a random validation non-edge is more similar: %d" % (nonEdgeWin))
+  print("Among all validation edges, average cosine similarity of a predicted link is %f" % (edgeProbEmbed))
+  print("Among all validation non-edges, average cosine similarity of a predicted link is %f" % (nonEdgeProbEmbed))
 
 
-evaluateAUC()
+evaluate()
