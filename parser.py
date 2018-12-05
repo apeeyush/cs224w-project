@@ -72,11 +72,11 @@ def appendEdge(G, paper1, paper2, label, ingestionFlags):
   shouldIngest = ingestionFlags.get(label, False)
   if shouldIngest:
     r = random.uniform(0, 1)
+    node1 = paperId2NodeId[paper1]
+    node2 = paperId2NodeId[paper2]
     if r <= pEdgeVal:
-      validationEdges.add((paper1, paper2))
+      validationEdges.add((node1, node2))
     else:
-      node1 = paperId2NodeId[paper1]
-      node2 = paperId2NodeId[paper2]
       G.add_edge(node1, node2, type=label)
 
 
