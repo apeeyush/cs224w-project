@@ -37,7 +37,7 @@ def predictEdgeBasedOnEmbedding(node1, node2):
   '''
   embedding1 = getNodeEmbedding(node1)
   embedding2 = getNodeEmbedding(node2)
-  return distance.cosine(embedding1, embedding2)
+  return np.dot(embedding1, embedding2)
 
 
 def coinToss(r):

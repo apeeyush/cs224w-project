@@ -74,9 +74,9 @@ def appendEdge(G, paper1, paper2, label, ingestionFlags):
     r = random.uniform(0, 1)
     node1 = paperId2NodeId[paper1]
     node2 = paperId2NodeId[paper2]
-    if r <= pEdgeVal:
+    if r <= pEdgeVal and G.degree(node1) > 1 and G.degree(node2) > 1:
       validationEdges.add((node1, node2))
-      G.add_edge(node1, node2, type=label)
+      #G.add_edge(node1, node2, type=label)
     else:
       G.add_edge(node1, node2, type=label)
 
@@ -99,6 +99,8 @@ def loadGraph(fileName, ingestionFlags):
   # currentPaperAbstract
   # publicationYear
   # publicationVenue
+  (currentPaperTitle, currentPaperAbstract, authorsRaw, publicationYear, publicationVenue,
+    currentPaperId) = ("", "", "", "", "", "")
   references = []
   count = 0
   with open(fileName, 'r') as f:
@@ -119,22 +121,19 @@ def loadGraph(fileName, ingestionFlags):
       elif prefix == "#%":
         references.append(int(line[2:]))
       elif prefix == "\n":
-        if len(references) < 1 or shouldSample(currentPaperId):
-          blacklist.add(currentPaperId)
-        elif currentPaperId not in blacklist:
-          appendNode(G, currentPaperId)
-          paperFeaturesMap[currentPaperId] = (int(publicationYear), currentPaperTitle, currentPaperAbstract)
-          for reference in references:
-            if reference not in blacklist:
-              appendNode(G, reference)
-              appendEdge(G, currentPaperId, reference, "reference", ingestionFlags)
-          if len(authorsRaw) >= 1:
-            authors = authorsRaw.split(',')
-            for author in authors:
-              if author not in knownInvalidAuthorNames:
-                authorMap.setdefault(author,[]).append(currentPaperId)
-          hashKey = publicationVenue + publicationYear
-          publicationMap.setdefault(hashKey,[]).append(currentPaperId)
+        appendNode(G, currentPaperId)
+        paperFeaturesMap[currentPaperId] = (int(publicationYear), currentPaperTitle, currentPaperAbstract)
+        for reference in references:
+          if reference not in blacklist:
+            appendNode(G, reference)
+            appendEdge(G, currentPaperId, reference, "reference", ingestionFlags)
+        if len(authorsRaw) >= 1:
+          authors = authorsRaw.split(',')
+          for author in authors:
+            if author not in knownInvalidAuthorNames:
+              authorMap.setdefault(author,[]).append(currentPaperId)
+        hashKey = publicationVenue + publicationYear
+        publicationMap.setdefault(hashKey,[]).append(currentPaperId)
 
         (currentPaperTitle, currentPaperAbstract, authorsRaw, publicationYear, publicationVenue,
          currentPaperId) = ("", "", "", "", "", "")
@@ -144,9 +143,9 @@ def loadGraph(fileName, ingestionFlags):
   annotateGraphWithEdges(G, authorMap, "coauthor", ingestionFlags)
   print "After adding coauthor edges:"
   printGraphStat(G)
-  annotateGraphWithEdges(G, publicationMap, 'publication', ingestionFlags)
-  print "After adding publication edges:"
-  printGraphStat(G)
+  #annotateGraphWithEdges(G, publicationMap, 'publication', ingestionFlags)
+  #print "After adding publication edges:"
+  #printGraphStat(G)
   return G
 
 
