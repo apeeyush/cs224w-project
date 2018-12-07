@@ -59,7 +59,7 @@ def run_random_walks(G, nodes, num_walks=N_WALKS):
                 if curr_node != node:
                     pairs.append((node,curr_node))
                 curr_node = next_node
-        if count % 1000 == 0:
+        if count % 10000 == 0:
             print("Done walks for", count, "nodes")
     return pairs
 
@@ -164,6 +164,7 @@ def loadGraph(fileName, ingestionFlags):
   annotateGraphWithEdges(G, authorMap, "coauthor", ingestionFlags)
   print "After adding coauthor edges:"
   printGraphStat(G)
+  addNodeFeatures(G, paperFeaturesMap)
   #annotateGraphWithEdges(G, publicationMap, 'publication', ingestionFlags)
   #print "After adding publication edges:"
   #printGraphStat(G)
@@ -180,6 +181,19 @@ def annotateGraphWithEdges(G, map, t, ingestionFlags):
     for index1 in xrange(len(papers)):
       for index2 in xrange(index1+1, len(papers)):
         appendEdge(G, papers[index1], papers[index2], t, ingestionFlags)
+
+
+def addNodeFeatures(G, nodeFeaturesMap):
+  nodeFeatureAttr = defaultdict(list)
+  maxPublicationYear = max(v[0] for v in nodeFeaturesMap.values())
+  minPublicationYear = min(v[0] for v in nodeFeaturesMap.values())
+  for paperId, features in nodeFeaturesMap.items():
+    if paperId in paperId2NodeId:
+      nodeId = paperId2NodeId[paperId]
+      normalizedPublicationYear = (features[0] - minPublicationYear) * 1.0 / maxPublicationYear
+      nodeFeatureAttr[nodeId].append(normalizedPublicationYear)
+      # TODO: Add title and abstract related features
+  nx.set_node_attributes(G, "feature", nodeFeatureAttr)
 
 
 def printGraphStat(G):
