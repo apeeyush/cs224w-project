@@ -4,6 +4,12 @@
 # Ignore the readings dir which contains research
 # papers and other relevant readings for the project
 readings/*
+# Ignore graph data
+citation-network2.rar
+citation-network2.txt
 outputacm.txt
 acm*
 GraphSAGE/unsup-../*
+graph_stat
+validation_edges
+validation_nonedges

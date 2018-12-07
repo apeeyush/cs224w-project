@@ -43,6 +43,27 @@ currentNodeId = 0
 pEdgeVal = 0.01 # 1% of edges are hidden from generated graph as validation edges
 validationEdges = set()
 
+
+WALK_LEN=5
+N_WALKS=25
+def run_random_walks(G, nodes, num_walks=N_WALKS):
+    pairs = []
+    for count, node in enumerate(nodes):
+        if G.degree(node) == 0:
+            continue
+        for i in range(num_walks):
+            curr_node = node
+            for j in range(WALK_LEN):
+                next_node = random.choice(G.neighbors(curr_node))
+                # self co-occurrences are useless
+                if curr_node != node:
+                    pairs.append((node,curr_node))
+                curr_node = next_node
+        if count % 1000 == 0:
+            print("Done walks for", count, "nodes")
+    return pairs
+
+
 def appendNode(G, paperId):
   '''
   Add node to G if it's not already there
@@ -120,7 +141,7 @@ def loadGraph(fileName, ingestionFlags):
         currentPaperId = int(line[6:])
       elif prefix == "#%":
         references.append(int(line[2:]))
-      elif prefix == "\n":
+      elif prefix == "\n" or prefix == "\r\n":
         appendNode(G, currentPaperId)
         paperFeaturesMap[currentPaperId] = (int(publicationYear), currentPaperTitle, currentPaperAbstract)
         for reference in references:
@@ -195,17 +216,17 @@ def dumpAsJson(G, path_prefix, dumpFeatures):
       node_name_id_map[str(node_id)] = idx
       idx += 1
     json.dump(node_name_id_map, f)
-  with open("{}-feats.npy".format(path_prefix), "w") as f:
-    features = []
-    numNodesWithoutFeatures = 0
-    for node_id in sorted(G.nodes()):
-      if "feature" in G.node[node_id]:
-        features.append(G.node[node_id]["feature"])
-      else:
-        features.append([0])
-        numNodesWithoutFeatures += 1
-    print("Number of nodes without features: {}".format(numNodesWithoutFeatures))
-    if dumpFeatures:
+  if dumpFeatures:
+    with open("{}-feats.npy".format(path_prefix), "w") as f:
+      features = []
+      numNodesWithoutFeatures = 0
+      for node_id in sorted(G.nodes()):
+        if "feature" in G.node[node_id]:
+          features.append(G.node[node_id]["feature"])
+        else:
+          features.append([0])
+          numNodesWithoutFeatures += 1
+      print("Number of nodes without features: {}".format(numNodesWithoutFeatures))
       np.save(f, features)
   with open("{}-class_map.json".format(path_prefix), "w") as f:
     node_name_class_map = {}
@@ -214,7 +235,9 @@ def dumpAsJson(G, path_prefix, dumpFeatures):
       node_name_class_map[str(node_id)] = [1]
     json.dump(node_name_class_map, f)
   with open("{}-walks.txt".format(path_prefix), "w") as f:
-    f.write("0\t1")  # Write dummy data
+    random_walks = run_random_walks(G, G.nodes())
+    for (node1, node2) in random_walks:
+      f.write("{}\t{}\n".format(node1, node2))
 
 
 def selectValidationNonEdges(G):
@@ -237,7 +260,8 @@ ingestionFlags = {
   "publication": False
 }
 
-G = loadGraph("outputacm.txt", ingestionFlags)
+graph_filepath = "outputacm.txt"  # One of outputacm.txt or citation-network2.txt
+G = loadGraph(graph_filepath, ingestionFlags)
 validationNonEdges = selectValidationNonEdges(G)
 
 with open('validation_edges', 'wb') as file:
@@ -248,4 +272,4 @@ with open('graph_stat', 'wb') as file:
   pickle.dump((G.number_of_nodes(), G.number_of_edges()), file)
 
 printNodeStat(G)
-dumpAsJson(G, "acm", True)
+dumpAsJson(G, "acm", dumpFeatures=False)
