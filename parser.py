@@ -224,18 +224,28 @@ def annotateGraphWithEdges(G, map, t, ingestionFlags):
 def addNodeFeatures(G, nodeFeaturesMap):
   doc_embeddings = DocEmbeddings()
   nodeFeatureAttr = defaultdict(list)
+  nodePublicationAttr = defaultdict(int)
   maxPublicationYear = max(v[0] for v in nodeFeaturesMap.values())
   minPublicationYear = min(v[0] for v in nodeFeaturesMap.values())
   for paperId, features in nodeFeaturesMap.items():
     if paperId in paperId2NodeId:
       nodeId = paperId2NodeId[paperId]
-      normalizedPublicationYear = (features[0] - minPublicationYear) * 1.0 / maxPublicationYear
-      nodeFeatureAttr[nodeId].append(normalizedPublicationYear)
+      nodePublicationAttr[nodeId] = features[0]
+      nodeFeatureAttr[nodeId] = [0]
+      # Add normalized publication year as feature
+      if "publicationYear" in featureSet:
+        normalizedPublicationYear = (features[0] - minPublicationYear) * 1.0 / maxPublicationYear
+        nodeFeatureAttr[nodeId].append(normalizedPublicationYear)
       # Compute the feature for paper title
-      titleEmbedding = doc_embeddings.get_sentence_embedding(features[1])
-      nodeFeatureAttr[nodeId] += titleEmbedding
-      # TODO: Compute the feature for paper abstract
+      if "paperTitle" in featureSet:
+        titleEmbedding = doc_embeddings.get_sentence_embedding(features[1])
+        nodeFeatureAttr[nodeId] += titleEmbedding
+      # Compute the feature for paper abstract
+      if "paperAbstract" in featureSet:
+        abstractEmbedding = doc_embeddings.get_sentence_embedding(features[2])
+        nodeFeatureAttr[nodeId] += abstractEmbedding
   nx.set_node_attributes(G, "feature", nodeFeatureAttr)
+  nx.set_node_attributes(G, "publicationYear", nodePublicationAttr)
 
 
 def printGraphStat(G):
@@ -278,7 +288,7 @@ def dumpAsJson(G, path_prefix, dumpFeatures):
           features.append(G.node[node_id]["feature"])
           del G.node[node_id]["feature"]
         else:
-          features.append(np.zeros(301))
+          features.append(np.zeros(featureSetSize))
           numNodesWithoutFeatures += 1
       print("Number of nodes without features: {}".format(numNodesWithoutFeatures))
       np.save(f, features)
@@ -318,8 +328,11 @@ ingestionFlags = {
   "coauthor": False,
   "publication": False
 }
-# TODO(apeeyush): Remove node features from G in order to dump
 dumpFeatures = False
+# "publicationYear", "paperTitle", "paperAbstract"
+# Size: 1, 300, 300
+featureSet = ["paperTitle", "paperAbstract"]
+featureSetSize = 600
 
 graph_filepath = "outputacm.txt"  # One of outputacm.txt or citation-network2.txt
 G, paperFeaturesMap = loadGraph(graph_filepath, ingestionFlags)
