@@ -16,8 +16,12 @@ import numpy as np
 import random
 import json
 from collections import defaultdict
+import nltk
+from nltk.stem import PorterStemmer
+from nltk.tokenize import sent_tokenize, word_tokenize
 from networkx.readwrite import json_graph
 import pickle
+import gensim
 
 random.seed(0)
 
@@ -29,6 +33,43 @@ knownInvalidAuthorNames.add(" V")
 knownInvalidAuthorNames.add(" VI")
 knownInvalidAuthorNames.add(" Jr.")
 knownInvalidAuthorNames.add("Staff")
+
+class DocEmbeddings(object):
+  """Get document embedding using the pre-trained Google news word embeddings.
+
+  TODO(apeeyush):
+  * Implement SIF based weighted averaging of word2vec.
+  * Tune the embeddings for the research paper dataset.
+  """
+
+  def __init__(self, **kwargs):
+    nltk.download('punkt')
+    self.model = gensim.models.KeyedVectors.load_word2vec_format('./GoogleNews-vectors-negative300.bin', binary=True)
+    self.word_vectors = self.model.wv
+
+  def get_word_embedding(self, word):
+    try:
+      embedding = self.model.word_vec(word)
+      return True, embedding
+    except KeyError:
+      return False, []
+
+  def get_sentence_embedding(self, sentence, debug=False):
+    words = word_tokenize(sentence.lower().decode("utf8"))
+    embeddings = []
+    for word in words:
+      present, embedding = self.get_word_embedding(word)
+      if present:
+        embeddings.append(embedding)
+      else:
+        # TODO(apeeyush): Consider splitting by '-' as well.
+        if debug:
+          print(word)
+    if len(embeddings) > 0:
+      return np.sum(embeddings, axis=0) / len(embeddings)
+    else:
+      return np.zeros(300)
+
 
 pTest = 0.1  # [0, 0.1] falls into test set
 pVal = 0  # no validation node set
@@ -111,7 +152,6 @@ def loadGraph(fileName, ingestionFlags):
   authorMap = dict()  # key: author, value: list of paperId
   publicationMap = dict()  # key: publication+year, value: list of paperId
   paperFeaturesMap = dict()  # key: research paper, value: (year, title, abstract)
-  blacklist = set()
   # In each iteration we keep the following information until we see the new line
   # authors: list of authors
   # references: list of references
@@ -145,9 +185,8 @@ def loadGraph(fileName, ingestionFlags):
         appendNode(G, currentPaperId)
         paperFeaturesMap[currentPaperId] = (int(publicationYear), currentPaperTitle, currentPaperAbstract)
         for reference in references:
-          if reference not in blacklist:
-            appendNode(G, reference)
-            appendEdge(G, currentPaperId, reference, "reference", ingestionFlags)
+          appendNode(G, reference)
+          appendEdge(G, currentPaperId, reference, "reference", ingestionFlags)
         if len(authorsRaw) >= 1:
           authors = authorsRaw.split(',')
           for author in authors:
@@ -164,11 +203,10 @@ def loadGraph(fileName, ingestionFlags):
   annotateGraphWithEdges(G, authorMap, "coauthor", ingestionFlags)
   print "After adding coauthor edges:"
   printGraphStat(G)
-  addNodeFeatures(G, paperFeaturesMap)
   #annotateGraphWithEdges(G, publicationMap, 'publication', ingestionFlags)
   #print "After adding publication edges:"
   #printGraphStat(G)
-  return G
+  return G, paperFeaturesMap
 
 
 def annotateGraphWithEdges(G, map, t, ingestionFlags):
@@ -184,6 +222,7 @@ def annotateGraphWithEdges(G, map, t, ingestionFlags):
 
 
 def addNodeFeatures(G, nodeFeaturesMap):
+  doc_embeddings = DocEmbeddings()
   nodeFeatureAttr = defaultdict(list)
   maxPublicationYear = max(v[0] for v in nodeFeaturesMap.values())
   minPublicationYear = min(v[0] for v in nodeFeaturesMap.values())
@@ -192,7 +231,10 @@ def addNodeFeatures(G, nodeFeaturesMap):
       nodeId = paperId2NodeId[paperId]
       normalizedPublicationYear = (features[0] - minPublicationYear) * 1.0 / maxPublicationYear
       nodeFeatureAttr[nodeId].append(normalizedPublicationYear)
-      # TODO: Add title and abstract related features
+      # Compute the feature for paper title
+      titleEmbedding = doc_embeddings.get_sentence_embedding(features[1])
+      nodeFeatureAttr[nodeId] += titleEmbedding
+      # TODO: Compute the feature for paper abstract
   nx.set_node_attributes(G, "feature", nodeFeatureAttr)
 
 
@@ -220,9 +262,6 @@ def dumpAsJson(G, path_prefix, dumpFeatures):
 
   The format dumped is parsable by GraphSAGE util method.
   """
-  data = json_graph.node_link_data(G)
-  with open("{}-G.json".format(path_prefix), "w") as f:
-    json.dump(data, f)
   with open("{}-id_map.json".format(path_prefix), "w") as f:
     node_name_id_map = {}
     idx = 0
@@ -237,11 +276,15 @@ def dumpAsJson(G, path_prefix, dumpFeatures):
       for node_id in sorted(G.nodes()):
         if "feature" in G.node[node_id]:
           features.append(G.node[node_id]["feature"])
+          del G.node[node_id]["feature"]
         else:
-          features.append([0])
+          features.append(np.zeros(301))
           numNodesWithoutFeatures += 1
       print("Number of nodes without features: {}".format(numNodesWithoutFeatures))
       np.save(f, features)
+  with open("{}-G.json".format(path_prefix), "w") as f:
+    data = json_graph.node_link_data(G)
+    json.dump(data, f)
   with open("{}-class_map.json".format(path_prefix), "w") as f:
     node_name_class_map = {}
     for node_id in sorted(G.nodes()):
@@ -268,15 +311,21 @@ def selectValidationNonEdges(G):
   return validationNonEdges
 
 
+
+
 ingestionFlags = {
   "reference": True,
   "coauthor": False,
   "publication": False
 }
+# TODO(apeeyush): Remove node features from G in order to dump
+dumpFeatures = False
 
 graph_filepath = "outputacm.txt"  # One of outputacm.txt or citation-network2.txt
-G = loadGraph(graph_filepath, ingestionFlags)
+G, paperFeaturesMap = loadGraph(graph_filepath, ingestionFlags)
 validationNonEdges = selectValidationNonEdges(G)
+if dumpFeatures:
+  addNodeFeatures(G, paperFeaturesMap)
 
 with open('validation_edges', 'wb') as file:
   pickle.dump(validationEdges, file)
@@ -286,4 +335,4 @@ with open('graph_stat', 'wb') as file:
   pickle.dump((G.number_of_nodes(), G.number_of_edges()), file)
 
 printNodeStat(G)
-dumpAsJson(G, "acm", dumpFeatures=False)
+dumpAsJson(G, "acm", dumpFeatures)

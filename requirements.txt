@@ -1,1 +1,3 @@
 networkx==1.11
+gensim
+nltk

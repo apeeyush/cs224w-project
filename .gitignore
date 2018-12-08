@@ -13,3 +13,5 @@ GraphSAGE/unsup-../*
 graph_stat
 validation_edges
 validation_nonedges
+# Gitignore the word embeddings
+GoogleNews-vectors-negative300.bin*
